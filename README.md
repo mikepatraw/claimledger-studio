@@ -41,12 +41,12 @@ Provider secrets/auth settings are stored only in local `.env`, which is ignored
 ## MVP workflow
 
 - Create a local project.
-- Upload or paste a master resume and approved source-material document.
-- Extract evidence spans and candidate claims.
+- Upload or paste a master resume and approved source-material document (`.md`, `.txt`, `.docx`, and PDF when `pdftotext` is available).
+- Extract evidence spans and candidate claims with the configured provider, or deterministic heuristic extraction.
 - Review the Claims Ledger: approve, edit, decline, and bulk-modify claims.
-- Generate bullets from approved claims.
-- Export Markdown with an internal audit manifest mapping each output bullet to claim IDs and evidence span IDs.
-- Review audit events for ingestion, extraction, edits, approvals, bullet generation, and exports.
+- Generate and review bullets from approved claims or from a saved job-description match.
+- Export Markdown or DOCX with an internal audit manifest mapping each output bullet to claim IDs and evidence span IDs.
+- Review audit events for ingestion, extraction, edits, approvals, bullet generation, job matching, provider failures, and exports.
 
 ## Public data boundary
 
@@ -75,4 +75,4 @@ tests/             unit, integration, smoke tests
 
 ## Current limitations
 
-The public MVP is intentionally local-only and dependency-light. Markdown/plain-text ingestion and Markdown export are implemented. DOCX export, advanced clustering UI, PDF parsing, and OS keychain storage are documented follow-ons.
+The public MVP is local-first and dependency-light. It now supports pasted text, Markdown/text uploads, DOCX text extraction through Python's standard library, PDF text extraction when `pdftotext` is installed, provider-backed claim extraction with heuristic fallback, approved-bullets import, JD matching, bullet review, and Markdown/DOCX export. Remaining follow-ons are stronger visual polish, richer resume section templates, OS keychain storage, and optional packaged binaries/Docker images.

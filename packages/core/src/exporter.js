@@ -1,4 +1,8 @@
+import { writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+
 export function assertExportable({ bullets, claims }) {
+  if (!bullets.length) throw new Error('export requires at least one approved bullet');
   const claimById = new Map(claims.map((claim) => [claim.id, claim]));
   for (const bullet of bullets) {
     if (bullet.status !== 'approved') throw new Error(`bullet ${bullet.id} is not approved`);
@@ -16,10 +20,13 @@ export function assertExportable({ bullets, claims }) {
   return true;
 }
 
-export function buildAuditManifest({ bullets, claims }) {
+export function buildAuditManifest({ bullets, claims, jobDescription = null, matches = [] }) {
   const claimById = new Map(claims.map((claim) => [claim.id, claim]));
   return {
     generated_at: new Date().toISOString(),
+    job_description_id: jobDescription?.id || null,
+    requirements: jobDescription?.requirements || [],
+    matches,
     bullets: bullets.map((bullet) => {
       const linkedClaims = (bullet.claim_ids || []).map((id) => claimById.get(id)).filter(Boolean);
       return {
@@ -36,4 +43,40 @@ export function renderMarkdownResume({ title, bullets, manifest }) {
   for (const bullet of bullets) lines.push(`- ${bullet.bullet_text} <!-- bullet:${bullet.id} -->`);
   lines.push('', '## Internal audit manifest', '', '```json', JSON.stringify(manifest, null, 2), '```', '');
   return lines.join('\n');
+}
+
+export async function writeDocxResume(outputPath, { title, bullets, manifest }) {
+  const payload = JSON.stringify({ title, bullets: bullets.map((b) => b.bullet_text), manifest });
+  const script = String.raw`
+import html, json, sys, zipfile
+out=sys.argv[1]
+data=json.loads(sys.stdin.read())
+def p(text, style=None):
+    text=html.escape(text or '')
+    st=f'<w:pPr><w:pStyle w:val="{style}"/></w:pPr>' if style else ''
+    return f'<w:p>{st}<w:r><w:t xml:space="preserve">{text}</w:t></w:r></w:p>'
+paras=[p(data.get('title','Tailored Resume'), 'Title')]
+paras.append(p('Generated locally by ClaimLedger Studio from approved evidence-backed claims.'))
+for bullet in data.get('bullets', []):
+    paras.append(p('• ' + bullet))
+paras.append(p('Internal audit manifest', 'Heading1'))
+paras.append(p(json.dumps(data.get('manifest', {}), indent=2)))
+doc='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+''.join(paras)+'<w:sectPr/></w:body></w:document>'
+content_types='<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
+rels='<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+styles='<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/></w:style></w:styles>'
+with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
+    z.writestr('[Content_Types].xml', content_types)
+    z.writestr('_rels/.rels', rels)
+    z.writestr('word/document.xml', doc)
+    z.writestr('word/styles.xml', styles)
+`;
+  const result = spawnSync('python3', ['-c', script, outputPath], { input: payload, encoding: 'utf8', timeout: 15_000 });
+  if (result.status !== 0) throw new Error(`docx export failed: ${result.stderr || result.stdout}`);
+  return outputPath;
+}
+
+export async function writeMarkdownResume(outputPath, args) {
+  await writeFile(outputPath, renderMarkdownResume(args));
+  return outputPath;
 }

@@ -30,7 +30,9 @@ test('local UI health check is reachable after setup', async () => {
   });
   try {
     const health = await waitForHealth(port);
-    assert.deepEqual(health, { ok: true, app: 'claimledger-studio' });
+    assert.equal(health.ok, true);
+    assert.equal(health.app, 'claimledger-studio');
+    assert.equal(health.provider, 'heuristic-only');
   } finally {
     child.kill('SIGTERM');
     await new Promise((resolve) => child.once('exit', resolve));
