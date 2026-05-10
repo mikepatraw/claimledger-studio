@@ -16,7 +16,15 @@ test('upload to extraction to approve to bullet to markdown export workflow', as
     const claims = await ledger.extractClaims(project.id);
     assert.ok(claims.length >= 1);
     assert.ok(claims.every((claim) => claim.evidence_span_ids.length >= 1));
-    const approved = await ledger.approveClaim(claims[0].id);
+    await ledger.bulkClaims(claims.map((claim) => claim.id), 'approve', 'reviewed in one batch');
+    const bulkAudit = await ledger.listAuditEvents(project.id);
+    const bulkEvent = bulkAudit.find((event) => event.event_type === 'claim_bulk_modified');
+    assert.deepEqual(bulkEvent.after_json, {
+      ids: claims.map((claim) => claim.id),
+      action: 'approve',
+      note: 'reviewed in one batch',
+    });
+    const approved = (await ledger.listClaims(project.id)).find((claim) => claim.id === claims[0].id);
     const bullet = await ledger.generateBullet(project.id, [approved.id], { tone: 'technical' });
     await ledger.approveBullet(bullet.id);
     const exported = await ledger.exportMarkdown(project.id, { title: 'Synthetic Target Role' });
