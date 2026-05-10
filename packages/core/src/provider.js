@@ -9,7 +9,7 @@ export function providerFromEnv(env = process.env) {
     model: env.CLAIMLEDGER_MODEL || (id === 'anthropic' ? 'claude-3-5-sonnet-latest' : id === 'ollama' ? 'llama3.1' : 'gpt-4o-mini'),
     baseUrl: env.CLAIMLEDGER_BASE_URL || (id === 'ollama' ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'),
     apiKey: env.CLAIMLEDGER_API_KEY || env.OPENAI_API_KEY || env.ANTHROPIC_API_KEY || '',
-    authMode: env.CLAIMLEDGER_AUTH_MODE || 'api_key',
+    authMode: env.CLAIMLEDGER_AUTH_METHOD || env.CLAIMLEDGER_AUTH_MODE || 'api_key',
     timeoutMs: Number(env.CLAIMLEDGER_TIMEOUT_MS || DEFAULT_TIMEOUT_MS)
   };
 }

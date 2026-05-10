@@ -19,3 +19,60 @@ test('review UI exposes individual and bulk claim review controls', async () => 
     assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
 });
+
+test('studio UI labels the workflow and exposes operation progress', async () => {
+  const source = await uiSource();
+
+  for (const text of [
+    'Project name',
+    'Source filename',
+    'Source type',
+    'Target role title',
+    'Generation tone',
+    'Operation progress',
+    'Ready for local work.',
+    'Ingesting source document',
+    'Extracting claims',
+    'Generating bullet drafts',
+    'Exporting approved resume',
+  ]) {
+    assert.match(source, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('workflow status rail communicates local-first stage state', async () => {
+  const source = await uiSource();
+
+  for (const text of [
+    'Local-only by default',
+    'Source intake',
+    'Claim extraction',
+    'Evidence review',
+    'Bullet generation',
+    'Local export',
+    'data-stage="source"',
+    'data-stage="claims"',
+    'data-stage="review"',
+    'data-stage="bullets"',
+    'data-stage="export"',
+    'setWorkflowStage',
+    'aria-current',
+  ]) {
+    assert.match(source, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('claims and bullets include inline source evidence previews', async () => {
+  const source = await uiSource();
+
+  for (const text of [
+    'sourcePreviewByClaim',
+    'evidence-preview',
+    'Source preview',
+    'Project-scoped evidence',
+    'renderBulletEvidencePreview',
+    'No linked source evidence yet',
+  ]) {
+    assert.match(source, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});

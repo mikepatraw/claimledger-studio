@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ClaimLedger } from '../../packages/core/src/ledger.js';
 
-test('approved bullets document imports traceable approved claims and exports docx', async () => {
+test('approved bullets export into traceable markdown and docx resume sections', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'claimledger-approved-'));
   try {
     const ledger = new ClaimLedger({ dataDir: dir });
@@ -15,7 +15,7 @@ test('approved bullets document imports traceable approved claims and exports do
     await ledger.ingestSourceDocument(project.id, {
       kind: 'approved_bullets',
       filename: 'approved-bullets.md',
-      text: '- Led 12-person operations team and reduced weekly reporting time by 30% using Python automation.\n- Managed risk controls for multi-team logistics operation.'
+      text: '- Led 12-person operations team and reduced weekly reporting time by 30% using Python automation.\n- Built deployment dashboard for logistics modernization project.'
     });
     const claims = await ledger.listClaims(project.id);
     const bullets = await ledger.listBullets(project.id);
@@ -23,12 +23,28 @@ test('approved bullets document imports traceable approved claims and exports do
     assert.equal(bullets.length, 2);
     assert.ok(claims.every((claim) => claim.status === 'approved' && claim.evidence_span_ids.length === 1));
     assert.ok(bullets.every((bullet) => bullet.status === 'approved' && bullet.claim_ids.length === 1));
-    const exported = await ledger.exportResume(project.id, { title: 'Approved Resume', format: 'docx' });
-    assert.match(exported.output_path, /\.docx$/);
-    const probe = spawnSync('python3', ['-c', "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); print('word/document.xml' in z.namelist()); print(z.read('word/document.xml').decode())", exported.output_path], { encoding: 'utf8' });
+
+    await ledger.editBullet(bullets[0].id, { target_section: 'Leadership' }, project.id);
+    await ledger.approveBullet(bullets[0].id, project.id);
+    await ledger.editBullet(bullets[1].id, { target_section: 'Projects' }, project.id);
+    await ledger.approveBullet(bullets[1].id, project.id);
+
+    const markdownExport = await ledger.exportResume(project.id, { title: 'Approved Resume', format: 'markdown' });
+    const markdown = await readFile(markdownExport.output_path, 'utf8');
+    assert.match(markdown, /## Leadership\n\n- Led 12-person operations team/);
+    assert.match(markdown, /## Projects\n\n- Built deployment dashboard/);
+    assert.equal(markdownExport.audit_manifest.bullets[0].target_section, 'Leadership');
+    assert.equal(markdownExport.audit_manifest.bullets[1].target_section, 'Projects');
+
+    const docxExport = await ledger.exportResume(project.id, { title: 'Approved Resume', format: 'docx' });
+    assert.match(docxExport.output_path, /\.docx$/);
+    const probe = spawnSync('python3', ['-c', "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); print('word/document.xml' in z.namelist()); print(z.read('word/document.xml').decode())", docxExport.output_path], { encoding: 'utf8' });
     assert.equal(probe.status, 0, probe.stderr);
     assert.match(probe.stdout, /True/);
     assert.match(probe.stdout, /Approved Resume/);
+    assert.match(probe.stdout, /Leadership/);
+    assert.match(probe.stdout, /Projects/);
+    assert.match(probe.stdout, /Led 12-person operations team/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -45,7 +61,7 @@ test('job description matching generates reviewable bullets from approved claims
     await ledger.bulkClaims(claims.map((claim) => claim.id), 'approve', 'verified');
     const job = await ledger.createJobDescription(project.id, { title: 'Risk Automation Analyst', raw_text: 'Need Python automation, risk management, and documentation.' });
     const matches = await ledger.matchJob(project.id, job.id);
-    assert.ok(matches.length >= 1);
+    assert.ok(matches.matches.length >= 1);
     const bullets = await ledger.generateRecommendedBullets(project.id, job.id, { tone: 'technical' });
     assert.ok(bullets.length >= 1);
     assert.equal(bullets[0].status, 'needs_review');
@@ -53,7 +69,9 @@ test('job description matching generates reviewable bullets from approved claims
     const exported = await ledger.exportResume(project.id, { title: job.title, format: 'markdown', jobDescriptionId: job.id });
     const markdown = await readFile(exported.output_path, 'utf8');
     assert.match(markdown, /Risk Automation Analyst/);
+    assert.match(markdown, /## Experience/);
     assert.equal(exported.audit_manifest.job_description_id, job.id);
+    assert.equal(exported.audit_manifest.bullets[0].target_section, 'Experience');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

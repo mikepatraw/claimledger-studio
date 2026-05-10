@@ -12,5 +12,5 @@ test('export manifest maps every bullet to claims and evidence spans', () => {
   const claims = [{ id: 'c1', status: 'approved', evidence_span_ids: ['e1'] }];
   const bullets = [{ id: 'b1', status: 'approved', claim_ids: ['c1'], bullet_text: 'Built a test harness.' }];
   assertExportable({ bullets, claims });
-  assert.deepEqual(buildAuditManifest({ bullets, claims }).bullets[0], { bullet_id: 'b1', claim_ids: ['c1'], evidence_span_ids: ['e1'] });
+  assert.deepEqual(buildAuditManifest({ bullets, claims }).bullets[0], { bullet_id: 'b1', target_section: 'Projects', claim_ids: ['c1'], evidence_span_ids: ['e1'] });
 });

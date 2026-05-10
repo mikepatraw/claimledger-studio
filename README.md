@@ -36,7 +36,14 @@ curl http://localhost:4173/health
 3. Anthropic API: source text may be sent to Anthropic.
 4. Heuristic-only: no model calls; deterministic extraction only.
 
-Provider secrets/auth settings are stored only in local `.env`, which is ignored by git. The setup wizard asks for API key vs OAuth/provider-CLI token mode for remote providers. Raw API keys are never displayed by the UI.
+Provider secrets/auth settings are local-only by default. Non-secret provider choices live in ignored `.env`; raw API keys written by the setup wizard go to ignored `.local/secrets.env` with `0600` permissions. Runtime still honors exported environment variables such as `CLAIMLEDGER_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`, so OAuth/provider-CLI workflows can inject short-lived tokens without writing an API key to disk. Raw API keys are never displayed by the UI.
+
+### Secret storage modes
+
+- Heuristic-only and Ollama modes do not require provider API secrets.
+- API-key mode stores only `CLAIMLEDGER_API_KEY` in `.local/secrets.env`; `.env` keeps provider, model, privacy mode, and secret-file path.
+- OAuth/provider-CLI mode writes no API key. Configure the provider CLI outside ClaimLedger and export any token the provider runtime requires before `npm run start`.
+- Container mode defaults to heuristic-only. If you experiment with a remote provider, pass secrets as runtime environment variables or mount ignored `.local/secrets.env`; do not bake secrets into the image.
 
 ## MVP workflow
 
@@ -60,6 +67,8 @@ npm run setup      # alias for node scripts/setup-provider.js if added by you
 npm run start
 npm test
 npm run build
+npm run container:build  # optional Docker image build
+npm run container:up     # optional docker compose run
 ```
 
 ## Repository map
@@ -68,11 +77,11 @@ npm run build
 apps/api/          local HTTP API and static UI server
 apps/studio/       browser UI for onboarding, Claims Ledger, export, audit
 packages/core/     schema validation, extraction, ledger, export gates
-docs/              product spec, architecture, data model, acceptance criteria
+docs/              product spec, architecture, container run notes, data model, acceptance criteria
 samples/           sanitized synthetic sample documents only
 tests/             unit, integration, smoke tests
 ```
 
 ## Current limitations
 
-The public MVP is local-first and dependency-light. It now supports pasted text, Markdown/text uploads, DOCX text extraction through Python's standard library, PDF text extraction when `pdftotext` is installed, provider-backed claim extraction with heuristic fallback, approved-bullets import, JD matching, bullet review, and Markdown/DOCX export. Remaining follow-ons are stronger visual polish, richer resume section templates, OS keychain storage, and optional packaged binaries/Docker images.
+The public MVP is local-first and dependency-light. It supports pasted text, Markdown/text uploads, DOCX text extraction through Python's standard library, PDF text extraction when `pdftotext` is installed, provider-backed claim extraction with heuristic fallback, local-file secret storage for API keys, approved-bullets import, JD matching, bullet review, sectioned Markdown/DOCX exports, and optional Docker/Compose execution. Remaining follow-ons are stronger visual polish and native OS keychain integrations if the project later accepts platform-specific dependencies.

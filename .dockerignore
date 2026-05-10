@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+!.env.example
+.local
+node_modules
+coverage
+data
+uploads
+exports
+audit-logs
+*.sqlite
+*.sqlite3
+*.db
+*.docx
+*.pdf

@@ -1,15 +1,15 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ClaimLedger } from '../../../packages/core/src/ledger.js';
 import { providerFromEnv } from '../../../packages/core/src/provider.js';
 import { providerCatalog } from '../../../packages/core/src/schema.js';
+import { loadClaimLedgerEnv } from '../../../packages/core/src/secrets.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
-loadLocalEnv(path.join(root, '.env'));
+await loadClaimLedgerEnv(root);
 const studioDir = path.join(root, 'apps/studio/src');
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || '127.0.0.1';
@@ -72,6 +72,7 @@ const server = http.createServer(async (req, res) => {
     const patchClaim = url.pathname.match(/^\/api\/claims\/([^/]+)$/);
     if (patchClaim && req.method === 'PATCH') { const b = await parseBody(req); return json(res, 200, await ledger.editClaim(patchClaim[1], b, b.project_id || null)); }
     if (url.pathname === '/api/claims/bulk' && req.method === 'POST') { const b = await parseBody(req); return json(res, 200, await ledger.bulkClaims(b.ids, b.action, b.note || '')); }
+    if (url.pathname === '/api/import/approved-items' && req.method === 'POST') { const b = await parseBody(req); return json(res, 201, await ledger.importApprovedItems(b.project_id, b)); }
 
     if (url.pathname === '/api/bullets' && req.method === 'GET') return json(res, 200, await ledger.listBullets(url.searchParams.get('project_id')));
     if (url.pathname === '/api/bullets' && req.method === 'POST') { const b = await parseBody(req); return json(res, 201, await ledger.generateBullet(b.project_id, b.claim_ids, { tone: b.tone, jobDescriptionId: b.job_description_id })); }
@@ -103,16 +104,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, host, () => console.log(`ClaimLedger Studio running at http://${host}:${port}`));
 
-function loadLocalEnv(file) {
-  try {
-    const text = readFileSync(file, 'utf8');
-    for (const line of text.split(/\r?\n/)) {
-      const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
-      if (!match || process.env[match[1]]) continue;
-      process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, '');
-    }
-  } catch {}
-}
 function redactUrl(value) {
   if (!value) return '';
   try { const u = new URL(value); u.username = ''; u.password = ''; return u.toString(); } catch { return value; }
