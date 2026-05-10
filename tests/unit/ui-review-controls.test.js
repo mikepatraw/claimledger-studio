@@ -40,6 +40,28 @@ test('studio UI labels the workflow and exposes operation progress', async () =>
   }
 });
 
+test('workflow status rail communicates local-first stage state', async () => {
+  const source = await uiSource();
+
+  for (const text of [
+    'Local-only by default',
+    'Source intake',
+    'Claim extraction',
+    'Evidence review',
+    'Bullet generation',
+    'Local export',
+    'data-stage="source"',
+    'data-stage="claims"',
+    'data-stage="review"',
+    'data-stage="bullets"',
+    'data-stage="export"',
+    'setWorkflowStage',
+    'aria-current',
+  ]) {
+    assert.match(source, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
 test('claims and bullets include inline source evidence previews', async () => {
   const source = await uiSource();
 

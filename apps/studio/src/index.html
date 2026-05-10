@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ClaimLedger Studio</title>
   <style>
-    body{font-family:Inter,system-ui,sans-serif;margin:0;background:#0f172a;color:#e5e7eb}.wrap{max-width:1280px;margin:auto;padding:24px}.card{background:#111827;border:1px solid #334155;border-radius:14px;padding:18px;margin:14px 0}.card h2{margin-top:0}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}.workflow{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.workflow span{border:1px solid #334155;border-radius:999px;padding:5px 10px;color:#bfdbfe;background:#172554}button,input,textarea,select{border-radius:8px;border:1px solid #475569;padding:8px;background:#020617;color:#e5e7eb}button{cursor:pointer;background:#2563eb;border-color:#2563eb;margin:3px}.danger{background:#7f1d1d;border-color:#991b1b}.ok{background:#166534;border-color:#166534}label{display:block;margin:8px 0 4px;font-weight:700}textarea{width:100%;min-height:110px}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #334155;padding:8px;text-align:left;vertical-align:top}.status{font-weight:700}.approved{color:#86efac}.needs_review,.edited{color:#fde68a}.declined{color:#fca5a5}.draft_unverified{color:#f0abfc}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.small{color:#94a3b8;font-size:.9em}.error{color:#fca5a5}.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}.toolbar input{min-width:240px}.select-col{width:42px}nav{color:#93c5fd;margin-bottom:12px}.progress{border-left:4px solid #38bdf8;padding:10px 12px;background:#082f49;border-radius:10px}.progress.working{border-color:#facc15}.progress.error{border-color:#f87171;background:#3f1d1d}.evidence-preview{border:1px solid #334155;border-radius:10px;background:#020617;padding:8px;margin-top:8px}.evidence-preview summary{cursor:pointer;color:#bfdbfe;font-weight:700}.quote{margin:8px 0;padding-left:8px;border-left:3px solid #38bdf8}pre{white-space:pre-wrap;overflow:auto;background:#020617;border:1px solid #334155;border-radius:10px;padding:10px}
+    body{font-family:Inter,system-ui,sans-serif;margin:0;background:#0f172a;color:#e5e7eb}.wrap{max-width:1280px;margin:auto;padding:24px}.card{background:#111827;border:1px solid #334155;border-radius:14px;padding:18px;margin:14px 0}.card h2{margin-top:0}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}.workflow{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.workflow span{border:1px solid #334155;border-radius:999px;padding:5px 10px;color:#bfdbfe;background:#172554}.stage-rail{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:14px 0}.stage{border:1px solid #334155;border-radius:12px;padding:10px;background:#020617;color:#94a3b8}.stage strong{display:block;color:#e5e7eb}.stage[aria-current="step"]{border-color:#38bdf8;background:#082f49;color:#bfdbfe}.privacy-callout{border:1px solid #14532d;background:#052e16;color:#bbf7d0;border-radius:12px;padding:10px 12px;margin:12px 0}.field-help{margin:4px 0 10px;color:#94a3b8;font-size:.9em}button,input,textarea,select{border-radius:8px;border:1px solid #475569;padding:8px;background:#020617;color:#e5e7eb}button{cursor:pointer;background:#2563eb;border-color:#2563eb;margin:3px}.danger{background:#7f1d1d;border-color:#991b1b}.ok{background:#166534;border-color:#166534}label{display:block;margin:8px 0 4px;font-weight:700}textarea{width:100%;min-height:110px}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #334155;padding:8px;text-align:left;vertical-align:top}.status{font-weight:700}.approved{color:#86efac}.needs_review,.edited{color:#fde68a}.declined{color:#fca5a5}.draft_unverified{color:#f0abfc}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.small{color:#94a3b8;font-size:.9em}.error{color:#fca5a5}.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}.toolbar input{min-width:240px}.select-col{width:42px}nav{color:#93c5fd;margin-bottom:12px}.progress{border-left:4px solid #38bdf8;padding:10px 12px;background:#082f49;border-radius:10px}.progress.working{border-color:#facc15}.progress.error{border-color:#f87171;background:#3f1d1d}.evidence-preview{border:1px solid #334155;border-radius:10px;background:#020617;padding:8px;margin-top:8px}.evidence-preview summary{cursor:pointer;color:#bfdbfe;font-weight:700}.quote{margin:8px 0;padding-left:8px;border-left:3px solid #38bdf8}pre{white-space:pre-wrap;overflow:auto;background:#020617;border:1px solid #334155;border-radius:10px;padding:10px}@media(max-width:820px){.grid,.stage-rail{grid-template-columns:1fr}.hero{display:block}}
   </style>
 </head>
 <body>
@@ -14,9 +14,17 @@
       <div>
         <h1>ClaimLedger Studio</h1>
         <p>A local-first resume tailoring app with claim-level evidence, approvals, and audit trails.</p>
-        <div class="workflow" aria-label="Workflow steps"><span>1 Source</span><span>2 Claims</span><span>3 Bullets</span><span>4 Export</span></div>
+        <div class="workflow" aria-label="Workflow summary"><span>1 Source</span><span>2 Claims</span><span>3 Evidence</span><span>4 Bullets</span><span>5 Export</span></div>
+        <div class="privacy-callout"><b>Local-only by default.</b> Source files, claim evidence, generated bullets, exports, and audit manifests stay in this project’s local data directory unless you explicitly configure a remote model provider.</div>
       </div>
       <div id="operationProgress" class="progress" role="status" aria-live="polite"><b>Operation progress</b><br><span>Ready for local work.</span></div>
+    </div>
+    <div id="workflowStages" class="stage-rail" aria-label="Workflow status">
+      <div class="stage" data-stage="source" aria-current="step"><strong>Source intake</strong><span>Upload or paste trusted local evidence.</span></div>
+      <div class="stage" data-stage="claims"><strong>Claim extraction</strong><span>Create traceable claims from project-scoped spans.</span></div>
+      <div class="stage" data-stage="review"><strong>Evidence review</strong><span>Approve, edit, or decline with inline source preview.</span></div>
+      <div class="stage" data-stage="bullets"><strong>Bullet generation</strong><span>Draft bullets only from approved evidence.</span></div>
+      <div class="stage" data-stage="export"><strong>Local export</strong><span>Write resume and manifest locally.</span></div>
     </div>
     <nav>Dashboard · Sources · Claims Ledger · Bullet Studio · Tailor to Job · Exports · Audit Trail · Settings</nav>
     <p id="settings" class="small"></p>
@@ -26,6 +34,7 @@
         <h2>1. Upload trusted source</h2>
         <label for="project">Project name</label>
         <input id="project" placeholder="Project name" value="Resume approval project">
+        <p class="field-help">Projects isolate source documents, evidence spans, claims, bullets, jobs, exports, and audit events.</p>
         <label for="filename">Source filename</label>
         <input id="filename" placeholder="filename for pasted text" value="master-resume.md">
         <label for="kind">Source type</label>
@@ -36,8 +45,10 @@
           <option value="other">other</option>
         </select>
         <label for="file">Optional local file</label>
+        <p class="field-help">Files are read by this local app and copied into the ignored local data directory.</p>
         <p><input id="file" type="file" accept=".txt,.md,.docx,.pdf,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></p>
         <label for="source">Paste source text</label>
+        <p class="field-help">Use only evidence you want available for claim extraction in this project.</p>
         <textarea id="source">Jordan Rivera led 8-person lab team and automated 14 weekly checks using Python.</textarea>
         <p><label><input type="checkbox" id="allowFallback" checked> If remote/local model extraction fails, fall back to heuristic extraction and log the provider error.</label></p>
         <p><button id="ingest">Create/use project + ingest</button><button id="extract">Extract claims</button></p>
@@ -48,6 +59,7 @@
         <label for="jobTitle">Target role title</label>
         <input id="jobTitle" placeholder="Role title" value="Synthetic Target Role">
         <label for="job">Job description text</label>
+        <p class="field-help">Saved job descriptions stay scoped to the current project and drive match scoring.</p>
         <textarea id="job">Need operations analyst with Python automation, documentation, and risk management.</textarea>
         <p><button id="saveJob">Save JD</button><label for="jobSelect">Saved JD</label><select id="jobSelect"></select><button id="matchJob">Match approved claims</button></p>
         <pre id="matchResult" class="small"></pre>
