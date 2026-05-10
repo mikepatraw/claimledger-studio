@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { providerCatalog } from '../packages/core/src/schema.js';
+import { defaultSecretFile, splitSecretValues, writeEnvFile } from '../packages/core/src/secrets.js';
 
 const envPath = path.resolve('.env');
+const secretPath = defaultSecretFile();
 const providers = providerCatalog();
 
 async function main() {
@@ -21,14 +22,19 @@ async function main() {
   const index = Number(choice) - 1;
   if (index < 0 || index > 3 || Number.isNaN(index)) throw new Error('provider choice must be 1-4');
   const provider = providers[index];
-  const values = { CLAIMLEDGER_PROVIDER: provider.id, CLAIMLEDGER_PRIVACY_MODE: provider.privacyMode };
+  const values = {
+    CLAIMLEDGER_PROVIDER: provider.id,
+    CLAIMLEDGER_PRIVACY_MODE: provider.privacyMode,
+    CLAIMLEDGER_SECRET_STORE: 'local_file',
+    CLAIMLEDGER_SECRET_FILE: '.local/secrets.env'
+  };
   if (provider.id === 'ollama') values.CLAIMLEDGER_MODEL = process.env.CLAIMLEDGER_MODEL || await rl.question('Ollama model [llama3.1]: ') || 'llama3.1';
   if (provider.id === 'openai-compatible') {
     const auth = process.env.CLAIMLEDGER_AUTH_METHOD || await rl.question('Auth method: 1) API key  2) OAuth/provider CLI token [1]: ') || '1';
     values.CLAIMLEDGER_AUTH_METHOD = auth === '2' ? 'oauth_or_provider_cli' : 'api_key';
     values.CLAIMLEDGER_BASE_URL = process.env.CLAIMLEDGER_BASE_URL || await rl.question('OpenAI-compatible base URL: ');
     if (values.CLAIMLEDGER_AUTH_METHOD === 'api_key') {
-      values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || await rl.question('API key (stored only in local ignored .env): ');
+      values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || await rl.question('API key (stored in local ignored .local/secrets.env with 0600 permissions): ');
     } else {
       values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || '';
       console.log('OAuth/provider CLI selected. Configure your provider token outside ClaimLedger and expose it to the runtime environment if required.');
@@ -39,7 +45,7 @@ async function main() {
     const auth = process.env.CLAIMLEDGER_AUTH_METHOD || await rl.question('Auth method: 1) API key  2) OAuth/provider CLI token [1]: ') || '1';
     values.CLAIMLEDGER_AUTH_METHOD = auth === '2' ? 'oauth_or_provider_cli' : 'api_key';
     if (values.CLAIMLEDGER_AUTH_METHOD === 'api_key') {
-      values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || await rl.question('Anthropic API key (stored only in local ignored .env): ');
+      values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || await rl.question('Anthropic API key (stored in local ignored .local/secrets.env with 0600 permissions): ');
     } else {
       values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || '';
       console.log('OAuth/provider CLI selected. Configure your provider token outside ClaimLedger and expose it to the runtime environment if required.');
@@ -48,11 +54,12 @@ async function main() {
   }
   rl.close();
   await mkdir('.local/db', { recursive: true });
-  let existing = existsSync(envPath) ? await readFile(envPath, 'utf8') : '';
-  const lines = existing.split(/\r?\n/).filter((line) => line && !Object.keys(values).some((key) => line.startsWith(`${key}=`)));
-  for (const [key, value] of Object.entries(values)) lines.push(`${key}=${String(value).replace(/\n/g, '')}`);
-  await writeFile(envPath, `${lines.join('\n')}\n`);
+  const { publicValues, secretValues } = splitSecretValues(values);
+  await writeEnvFile(envPath, publicValues);
+  if (Object.values(secretValues).some((value) => String(value || '').trim())) await writeEnvFile(secretPath, secretValues);
   console.log(`Saved ${provider.displayName} config to local .env (${provider.privacyMode}).`);
+  if (Object.values(secretValues).some((value) => String(value || '').trim())) console.log(`Stored provider secret in ignored ${path.relative(process.cwd(), secretPath)} with local-file permissions.`);
+  else console.log('No provider API key was stored; runtime will use exported environment variables or provider CLI/OAuth tokens if configured.');
   if (provider.sendsOffMachine) console.log('Privacy notice: source text may be sent to the selected remote API provider during AI extraction.');
   else console.log('Privacy notice: this mode does not send source text outside this machine.');
 }

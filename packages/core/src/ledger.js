@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { makeId, nowIso, validateClaim } from './schema.js';
 import { segmentEvidence, extractHeuristicClaims } from './extractor.js';
 import { extractClaimsWithProvider, providerFromEnv } from './provider.js';
-import { assertExportable, buildAuditManifest, writeDocxResume, writeMarkdownResume } from './exporter.js';
+import { assertExportable, applyResumeSections, buildAuditManifest, writeDocxResume, writeMarkdownResume } from './exporter.js';
 
 async function readJson(file, fallback) {
   try { return JSON.parse(await readFile(file, 'utf8')); } catch { return fallback; }
@@ -61,6 +61,55 @@ export class ClaimLedger {
     if (source.kind === 'approved_bullets') importApprovedBullets(store, projectId, source, spans);
     await this._save(store);
     return source;
+  }
+
+  async importApprovedItems(projectId, input) {
+    const rows = parseApprovedImportRows(input);
+    const store = await this._store();
+    const source = {
+      id: makeId('src'),
+      project_id: projectId,
+      kind: 'approved_import',
+      filename: input.filename || 'approved-import',
+      mime_type: input.content_type || input.mime_type || 'text/plain',
+      sha256: createHash('sha256').update(input.content || '').digest('hex'),
+      text_content: rows.map((row) => row.evidence || row.claim_text || row.bullet_text).filter(Boolean).join('\n'),
+      created_at: nowIso()
+    };
+    const spans = [];
+    for (const [index, row] of rows.entries()) {
+      const text = String(row.evidence || row.claim_text || row.bullet_text || '').trim();
+      if (!text) continue;
+      const start = source.text_content.indexOf(text);
+      spans.push({ id: makeId('ev'), source_document_id: source.id, start_char: Math.max(0, start), end_char: Math.max(0, start) + text.length, quote: text, label: row.claim_type || 'achievement', created_by: 'approved_import', created_at: nowIso() });
+      row._span_id = spans[spans.length - 1].id;
+      row._row_number = index + 1;
+    }
+    store.source_documents.push(source);
+    store.evidence_spans.push(...spans);
+    await writeFile(path.join(this.uploadDir, `${source.id}-${source.filename.replace(/[^a-z0-9._-]/gi, '_')}.txt`), source.text_content);
+    const importedClaims = [];
+    const importedBullets = [];
+    for (const row of rows) {
+      const text = String(row.claim_text || row.bullet_text || '').trim();
+      const evidenceIds = row._span_id ? [row._span_id] : [];
+      const noteParts = ['Imported from approved JSON/CSV bulk import.'];
+      if (row.source_ref) noteParts.push(`source_ref: ${row.source_ref}`);
+      const claim = { id: makeId('cl'), project_id: projectId, claim_text: text.replace(/\.$/, ''), claim_type: normalizeClaimType(row.claim_type), status: 'approved', confidence: 1, evidence_score: evidenceIds.length ? 1 : 0, source: 'user', evidence_span_ids: evidenceIds, manual_evidence_note: noteParts.join(' '), created_at: nowIso(), updated_at: nowIso() };
+      validateClaim(claim);
+      store.claims.push(claim);
+      importedClaims.push(claim);
+      if (evidenceIds.length) store.claim_evidence.push({ claim_id: claim.id, evidence_span_id: evidenceIds[0], relation: 'supports', rationale: 'Imported approved claim is supported by the supplied evidence/source reference.' });
+      if (row.bullet_text) {
+        const bullet = { id: makeId('bul'), project_id: projectId, bullet_text: ensureSentence(row.bullet_text), status: 'approved', tone: 'approved_import', created_from: 'approved_import', claim_ids: [claim.id], job_description_id: null, target_section: row.target_section || 'Experience', created_at: nowIso(), updated_at: nowIso() };
+        store.bullets.push(bullet);
+        store.bullet_claims.push({ bullet_id: bullet.id, claim_id: claim.id, relation: 'expresses' });
+        importedBullets.push(bullet);
+      }
+    }
+    store.audit_events.push(audit(projectId, 'system', 'approved_bulk_imported', 'source_document', source.id, null, { filename: source.filename, imported_claims: importedClaims.length, imported_bullets: importedBullets.length }));
+    await this._save(store);
+    return { source_document_id: source.id, imported_claims: importedClaims.length, imported_bullets: importedBullets.length, claim_ids: importedClaims.map((claim) => claim.id), bullet_ids: importedBullets.map((bullet) => bullet.id) };
   }
 
   async extractClaims(projectId, { allowProviderFallback = false } = {}) {
@@ -139,9 +188,9 @@ export class ClaimLedger {
   }
 
   async generateRecommendedBullets(projectId, jobDescriptionId, { limit = 8, tone = 'civilian' } = {}) {
-    const matches = await this.matchJob(projectId, jobDescriptionId, { limit });
+    const jobMatch = await this.matchJob(projectId, jobDescriptionId, { limit });
     const bullets = [];
-    for (const match of matches) bullets.push(await this.generateBullet(projectId, [match.claim_id], { tone, jobDescriptionId }));
+    for (const match of jobMatch.matches) bullets.push(await this.generateBullet(projectId, [match.claim_id], { tone, jobDescriptionId }));
     return bullets;
   }
 
@@ -149,7 +198,7 @@ export class ClaimLedger {
   async declineBullet(bulletId, projectId = null) { return this._updateBullet(bulletId, (bullet) => ({ ...bullet, status: 'declined', updated_at: nowIso() }), 'bullet_declined', projectId); }
   async editBullet(bulletId, patch, projectId = null) {
     const safePatch = {};
-    for (const key of ['bullet_text', 'tone']) if (Object.hasOwn(patch, key)) safePatch[key] = patch[key];
+    for (const key of ['bullet_text', 'tone', 'target_section']) if (Object.hasOwn(patch, key)) safePatch[key] = patch[key];
     return this._updateBullet(bulletId, (bullet) => ({ ...bullet, ...safePatch, status: 'needs_review', updated_at: nowIso() }), 'bullet_edited', projectId);
   }
 
@@ -179,28 +228,42 @@ export class ClaimLedger {
     const store = await this._store();
     const job = store.job_descriptions.find((item) => item.id === jobDescriptionId && item.project_id === projectId);
     if (!job) throw new Error(`job description not found: ${jobDescriptionId}`);
-    const keywords = new Set(job.requirements.map((req) => req.toLowerCase()));
+    const requirements = normalizeRequirements(job.requirements);
     const claims = store.claims.filter((claim) => claim.project_id === projectId && claim.status === 'approved');
-    const scored = claims.map((claim) => {
-      const text = claim.claim_text.toLowerCase();
-      const hits = [...keywords].filter((keyword) => text.includes(keyword));
-      const metricBoost = /\d|%|\$/.test(text) ? 0.15 : 0;
-      const score = hits.length + metricBoost + Number(claim.evidence_score || 0);
-      return { claim_id: claim.id, score, requirement_hits: hits };
-    }).filter((match) => match.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
-    store.audit_events.push(audit(projectId, 'system', 'job_matched', 'job_description', job.id, null, { matches: scored }));
+    const covered = new Set();
+    const matches = claims.map((claim) => {
+      const text = normalizeText(claim.claim_text);
+      const hits = requirements.filter((keyword) => text.includes(keyword));
+      for (const hit of hits) covered.add(hit);
+      const requirementScore = requirements.length ? hits.length / requirements.length : 0;
+      const evidenceScore = Math.max(0, Math.min(1, Number(claim.evidence_score || 0)));
+      const metricScore = /\d|%|\$/.test(claim.claim_text) ? 0.1 : 0;
+      const score = Math.min(1, Number((requirementScore * 0.65 + evidenceScore * 0.25 + metricScore).toFixed(4)));
+      return {
+        claim_id: claim.id,
+        score,
+        relevance_label: score >= 0.75 ? 'strong' : score >= 0.45 ? 'moderate' : 'weak',
+        requirement_hits: hits,
+        missing_requirements: requirements.filter((keyword) => !hits.includes(keyword)),
+        score_breakdown: { requirement_score: Number(requirementScore.toFixed(4)), evidence_score: evidenceScore, metric_score: metricScore },
+        rationale: hits.length ? `Matched ${hits.join(', ')} with ${metricScore ? 'quantified ' : ''}approved evidence.` : 'No direct requirement keywords matched this approved claim.'
+      };
+    }).filter((match) => match.score > 0).sort((a, b) => b.score - a.score || a.claim_id.localeCompare(b.claim_id)).slice(0, limit);
+    const skill_gaps = requirements.filter((requirement) => !covered.has(requirement)).map((requirement) => ({ requirement, reason: 'No approved claim currently contains this requirement keyword.' }));
+    const result = { job_description_id: job.id, requirements, matches, skill_gaps, coverage: { matched_requirements: requirements.filter((requirement) => covered.has(requirement)), total_requirements: requirements.length }, length: matches.length };
+    store.audit_events.push(audit(projectId, 'system', 'job_matched', 'job_description', job.id, null, result));
     await this._save(store);
-    return scored;
+    return result;
   }
 
   async exportResume(projectId, { title = 'Tailored Resume', format = 'markdown', jobDescriptionId = null } = {}) {
     const store = await this._store();
     const claims = store.claims.filter((claim) => claim.project_id === projectId);
-    const bullets = store.bullets.filter((bullet) => bullet.project_id === projectId && bullet.status === 'approved');
+    const bullets = applyResumeSections(store.bullets.filter((bullet) => bullet.project_id === projectId && bullet.status === 'approved'), claims);
     assertExportable({ bullets, claims });
     const job = jobDescriptionId ? store.job_descriptions.find((item) => item.id === jobDescriptionId) : null;
-    const matches = job ? await this.matchJob(projectId, jobDescriptionId) : [];
-    const manifest = buildAuditManifest({ bullets, claims, jobDescription: job, matches });
+    const jobMatch = job ? await this.matchJob(projectId, jobDescriptionId) : null;
+    const manifest = buildAuditManifest({ bullets, claims, jobDescription: job, matches: jobMatch || [] });
     const extension = format === 'docx' ? 'docx' : 'md';
     const outputPath = path.join(this.exportDir, `${projectId}-tailored-resume.${extension}`);
     if (format === 'docx') await writeDocxResume(outputPath, { title, bullets, manifest });
@@ -266,7 +329,8 @@ print('\n'.join(paras))
 
 function extractPdfText(buffer) {
   const result = spawnSync('pdftotext', ['-', '-'], { input: buffer, encoding: 'buffer', maxBuffer: 20 * 1024 * 1024, timeout: 15_000 });
-  if (result.status !== 0) throw new Error(`pdf text extraction requires pdftotext; command failed: ${String(result.stderr || result.stdout)}`);
+  if (result.error?.code === 'ENOENT') throw new Error('PDF text extraction requires the local `pdftotext` command. Install poppler-utils or upload/paste text/Markdown instead.');
+  if (result.status !== 0) throw new Error(`PDF text extraction failed with pdftotext. Install/verify poppler-utils or upload/paste text/Markdown instead: ${String(result.stderr || result.stdout)}`);
   return String(result.stdout).trim();
 }
 
@@ -284,6 +348,81 @@ function importApprovedBullets(store, projectId, source, spans) {
     store.bullet_claims.push({ bullet_id: bullet.id, claim_id: claim.id, relation: 'expresses' });
     store.audit_events.push(audit(projectId, 'system', 'approved_bullet_imported', 'bullet', bullet.id, null, { bullet, claim }));
   }
+}
+
+
+function parseApprovedImportRows(input) {
+  const raw = String(input.content ?? input.text ?? '');
+  if (!raw.trim()) throw new Error('bulk import requires content');
+  const lowerName = String(input.filename || '').toLowerCase();
+  const type = String(input.content_type || input.mime_type || '').toLowerCase();
+  const rows = lowerName.endsWith('.json') || type.includes('json') ? parseJsonRows(raw) : parseCsvRows(raw);
+  return rows.map((row, index) => normalizeApprovedRow(row, index + 1));
+}
+
+function parseJsonRows(raw) {
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (err) { throw new Error(`bulk JSON import is invalid: ${err.message}`); }
+  const rows = Array.isArray(parsed) ? parsed : parsed.items || parsed.claims || parsed.bullets;
+  if (!Array.isArray(rows)) throw new Error('bulk JSON import requires an array of rows');
+  return rows;
+}
+
+function parseCsvRows(raw) {
+  const records = parseCsv(raw);
+  if (records.length < 2) throw new Error('bulk CSV import requires a header row and at least one data row');
+  const headers = records[0].map((h) => h.trim());
+  return records.slice(1).filter((row) => row.some((cell) => String(cell).trim())).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] || ''])));
+}
+
+function parseCsv(raw) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (quoted) {
+      if (ch === '"' && raw[i + 1] === '"') { cell += '"'; i += 1; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (ch !== '\r') cell += ch;
+  }
+  row.push(cell);
+  rows.push(row);
+  return rows;
+}
+
+function normalizeApprovedRow(row, rowNumber) {
+  if (!row || typeof row !== 'object') throw new Error(`row ${rowNumber} must be an object`);
+  const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [String(key).trim().toLowerCase(), typeof value === 'string' ? value.trim() : value]));
+  const claimText = String(normalized.claim_text || normalized.claim || normalized.text || '').trim();
+  const bulletText = String(normalized.bullet_text || normalized.bullet || '').trim();
+  if (!claimText && !bulletText) throw new Error(`row ${rowNumber} requires claim_text or bullet_text`);
+  return { claim_text: claimText || bulletText, bullet_text: bulletText, claim_type: normalized.claim_type || normalized.type || 'achievement', evidence: String(normalized.evidence || normalized.evidence_text || normalized.quote || '').trim(), source_ref: String(normalized.source_ref || normalized.source || '').trim(), target_section: String(normalized.target_section || normalized.section || 'Experience').trim() };
+}
+
+function normalizeClaimType(value) {
+  const allowed = new Set(['achievement', 'skill', 'scope', 'credential', 'tool', 'domain', 'responsibility', 'metric', 'other']);
+  const type = String(value || 'achievement').toLowerCase();
+  return allowed.has(type) ? type : 'other';
+}
+
+function ensureSentence(text) {
+  const clean = String(text || '').trim();
+  return /[.!?]$/.test(clean) ? clean : `${clean}.`;
+}
+
+function normalizeRequirements(requirements) {
+  const stop = new Set(['and', 'the', 'for', 'with', 'from', 'this', 'that', 'role', 'need', 'must', 'will', 'you', 'our', 'job']);
+  return [...new Set((requirements || []).map((req) => normalizeText(req)).filter((req) => req.length > 2 && !stop.has(req)))];
+}
+
+function normalizeText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ').trim();
 }
 
 function renderBulletText(text, tone) {
