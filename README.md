@@ -7,7 +7,7 @@ ClaimLedger Studio is not a generic resume generator. It is a claim approval wor
 ## Quick start
 
 ```bash
-git clone https://github.com/<owner>/claimledger-studio.git
+git clone https://github.com/mikepatraw/claimledger-studio.git
 cd claimledger-studio
 ./install.sh
 ```
