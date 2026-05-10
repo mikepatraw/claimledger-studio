@@ -78,13 +78,13 @@ export class ClaimLedger {
   async declineClaim(claimId) { return this._updateClaim(claimId, (claim) => ({ ...claim, status: 'declined', updated_at: nowIso() }), 'claim_declined'); }
   async editClaim(claimId, patch) { return this._updateClaim(claimId, (claim) => ({ ...claim, ...patch, status: patch.status || 'edited', updated_at: nowIso() }), 'claim_edited'); }
 
-  async bulkClaims(ids, action) {
+  async bulkClaims(ids, action, note = '') {
     const changed = [];
     for (const id of ids) changed.push(action === 'approve' ? await this.approveClaim(id) : await this.declineClaim(id));
     const store = await this._store();
     const projectId = changed[0]?.project_id;
     if (projectId) {
-      store.audit_events.push(audit(projectId, 'user', 'claim_bulk_modified', 'claim', 'bulk', null, { ids, action }));
+      store.audit_events.push(audit(projectId, 'user', 'claim_bulk_modified', 'claim', 'bulk', null, { ids, action, note }));
       await this._save(store);
     }
     return changed;

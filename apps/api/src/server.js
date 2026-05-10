@@ -55,7 +55,7 @@ const server = http.createServer(async (req, res) => {
     if (declineClaim && req.method === 'POST') return json(res, 200, await ledger.declineClaim(declineClaim[1]));
     const patchClaim = url.pathname.match(/^\/api\/claims\/([^/]+)$/);
     if (patchClaim && req.method === 'PATCH') return json(res, 200, await ledger.editClaim(patchClaim[1], await parseBody(req)));
-    if (url.pathname === '/api/claims/bulk' && req.method === 'POST') { const b = await parseBody(req); return json(res, 200, await ledger.bulkClaims(b.ids, b.action)); }
+    if (url.pathname === '/api/claims/bulk' && req.method === 'POST') { const b = await parseBody(req); return json(res, 200, await ledger.bulkClaims(b.ids, b.action, b.note || '')); }
     if (url.pathname === '/api/bullets' && req.method === 'GET') return json(res, 200, await ledger.listBullets(url.searchParams.get('project_id')));
     if (url.pathname === '/api/bullets' && req.method === 'POST') { const b = await parseBody(req); return json(res, 201, await ledger.generateBullet(b.project_id, b.claim_ids, { tone: b.tone })); }
     const patchBullet = url.pathname.match(/^\/api\/bullets\/([^/]+)$/);
