@@ -36,7 +36,7 @@ curl http://localhost:4173/health
 3. Anthropic API: source text may be sent to Anthropic.
 4. Heuristic-only: no model calls; deterministic extraction only.
 
-Provider secrets are stored only in local `.env`, which is ignored by git. Raw API keys are never displayed by the UI.
+Provider secrets/auth settings are stored only in local `.env`, which is ignored by git. The setup wizard asks for API key vs OAuth/provider-CLI token mode for remote providers. Raw API keys are never displayed by the UI.
 
 ## MVP workflow
 

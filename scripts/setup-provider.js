@@ -24,12 +24,26 @@ async function main() {
   const values = { CLAIMLEDGER_PROVIDER: provider.id, CLAIMLEDGER_PRIVACY_MODE: provider.privacyMode };
   if (provider.id === 'ollama') values.CLAIMLEDGER_MODEL = process.env.CLAIMLEDGER_MODEL || await rl.question('Ollama model [llama3.1]: ') || 'llama3.1';
   if (provider.id === 'openai-compatible') {
+    const auth = process.env.CLAIMLEDGER_AUTH_METHOD || await rl.question('Auth method: 1) API key  2) OAuth/provider CLI token [1]: ') || '1';
+    values.CLAIMLEDGER_AUTH_METHOD = auth === '2' ? 'oauth_or_provider_cli' : 'api_key';
     values.CLAIMLEDGER_BASE_URL = process.env.CLAIMLEDGER_BASE_URL || await rl.question('OpenAI-compatible base URL: ');
-    values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || await rl.question('API key (stored only in local ignored .env): ');
+    if (values.CLAIMLEDGER_AUTH_METHOD === 'api_key') {
+      values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || await rl.question('API key (stored only in local ignored .env): ');
+    } else {
+      values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || '';
+      console.log('OAuth/provider CLI selected. Configure your provider token outside ClaimLedger and expose it to the runtime environment if required.');
+    }
     values.CLAIMLEDGER_MODEL = process.env.CLAIMLEDGER_MODEL || await rl.question('Model name: ');
   }
   if (provider.id === 'anthropic') {
-    values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || await rl.question('Anthropic API key (stored only in local ignored .env): ');
+    const auth = process.env.CLAIMLEDGER_AUTH_METHOD || await rl.question('Auth method: 1) API key  2) OAuth/provider CLI token [1]: ') || '1';
+    values.CLAIMLEDGER_AUTH_METHOD = auth === '2' ? 'oauth_or_provider_cli' : 'api_key';
+    if (values.CLAIMLEDGER_AUTH_METHOD === 'api_key') {
+      values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || await rl.question('Anthropic API key (stored only in local ignored .env): ');
+    } else {
+      values.CLAIMLEDGER_API_KEY = process.env.CLAIMLEDGER_API_KEY || '';
+      console.log('OAuth/provider CLI selected. Configure your provider token outside ClaimLedger and expose it to the runtime environment if required.');
+    }
     values.CLAIMLEDGER_MODEL = process.env.CLAIMLEDGER_MODEL || await rl.question('Model name [claude-sonnet-4-5]: ') || 'claude-sonnet-4-5';
   }
   rl.close();
